@@ -1,0 +1,688 @@
+1. ЦЕЛЬ РАБОТЫ
+
+
+Освоить навыки проектирования реляционной базы данных в заданной предметной
+области, включая:
+
+- создание структуры БД с учётом нормализации и связей между сущностями;
+- настройку физического хранения данных (файлы, файловые группы, ограничения
+  роста);
+- управление пользователями и привилегиями;
+- выполнение административных операций: перемещение файлов БД;
+- выполнение административных операций: перемещение БД (отсоединение и
+  повторное подключение).
+
+Предметная область: Библиотека.
+
+Назначение БД: автоматизация работы библиотеки — ведение каталога книг,
+регистрация читателей, оформление выдачи и возврата книг, расчёт штрафов за
+просрочку, поиск литературы по автору, жанру или году издания.
+
+Технические ограничения варианта:
+- структура БД содержит не более 5 таблиц;
+- общий размер БД не превышает 380 МБ;
+- создана отдельная файловая группа FG_Archive для хранения исторических
+  данных о возврате книг старше 1 года;
+- реализованы 4 роли: Admin, Librarian, ReaderRole, InventoryManager.
+
+
+
+2. ТЕОРЕТИЧЕСКИЕ СВЕДЕНИЯ
+
+
+2.1. Нормализация реляционных баз данных
+--------------------------------------------------------------------------------
+
+Нормализация — процесс организации данных в БД с целью устранения избыточности
+и аномалий вставки, обновления и удаления.
+
+- Первая нормальная форма (1НФ) — все атрибуты атомарны, отсутствуют
+  повторяющиеся группы.
+- Вторая нормальная форма (2НФ) — выполняется 1НФ и каждый неключевой атрибут
+  полностью зависит от первичного ключа (нет частичной зависимости).
+- Третья нормальная форма (3НФ) — выполняется 2НФ и отсутствуют транзитивные
+  зависимости неключевых атрибутов.
+
+
+2.2. Физическое хранение данных в MS SQL Server
+--------------------------------------------------------------------------------
+
+В MS SQL Server база данных состоит из:
+- основного файла данных (.mdf) — содержит системные таблицы и пользовательские
+  данные;
+- вторичных файлов данных (.ndf) — дополнительные файлы, размещаемые в
+  отдельных файловых группах;
+- файла журнала транзакций (.ldf) — обеспечивает восстановление БД и
+  целостность данных.
+
+Файловая группа — логическое объединение файлов данных. Размещение таблиц и
+индексов в разных файловых группах на разных физических дисках позволяет:
+- распараллелить операции ввода-вывода;
+- повысить отказоустойчивость;
+- отделить «горячие» (часто читаемые) данные от архивных.
+
+
+2.3. Управление доступом
+--------------------------------------------------------------------------------
+
+SQL Server использует двухуровневую модель безопасности:
+- уровень сервера — логины (CREATE LOGIN);
+- уровень базы данных — пользователи (CREATE USER) и роли (CREATE ROLE).
+
+Принцип минимальных привилегий реализуется через:
+- представления (VIEW) — скрывают столбцы и строки базовых таблиц;
+- хранимые процедуры (SP) — инкапсулируют бизнес-логику;
+- ownership chaining — пользователь получает доступ к объектам через
+  посредника, не имея прав на сами таблицы.
+
+
+
+3. РАСЧЁТНО-ГРАФИЧЕСКАЯ ЧАСТЬ
+
+
+3.1. Описание предметной области
+--------------------------------------------------------------------------------
+
+База данных «Библиотека» предназначена для автоматизации деятельности
+библиотеки. Пользователи системы:
+
+- библиотекарь — оформляет выдачу и возврат книг, регистрирует читателей,
+  рассчитывает штрафы;
+- читатель — просматривает каталог книг и свои текущие выдачи;
+- сотрудник инвентаризации — ведёт каталог книг (добавление, изменение,
+  удаление);
+- администратор — полный доступ ко всем объектам, файлам и журналам.
+
+
+3.2. ER-диаграмма
+--------------------------------------------------------------------------------
+
+ER-диаграмма построена в нотации Crow's Foot (IE-нотация, «вороньи лапки»).
+Сущности обозначены прямоугольниками с перечислением атрибутов, первичные
+ключи помечены PK, внешние — FK, уникальные — UK. Мощность связей показана
+символами «||» (ровно один) и «o{» (ноль или много).
+
+Связи проведены от боковой грани родительской таблицы на уровне конкретного
+атрибута-ключа к соответствующему атрибуту-ключу дочерней таблицы
+(например, Books.BookID → Loans.BookID).
+
+
+--------------------------------------------------------------------------------
+Рисунок 1 — ER-диаграмма БД «Библиотека» (нотация Crow's Foot)
+--------------------------------------------------------------------------------
+
+   +----------------------------------+
+   |              BOOKS               |
+   +----------------------------------+
+   | PK  BookID            INT  IDENT |----------------+
+   |     Title             VARCHAR    |                |
+   |     Author            VARCHAR IX |                |
+   |     Genre             VARCHAR IX |                |  1
+   |     PublicationYear   SMALLINT IX|                |
+   | UK  ISBN              VARCHAR    |                |
+   |     TotalCopies       INT        |                |
+   |     AvailableCopies   INT        |                |
+   +----------------------------------+                |
+                                                       |
+                                                       |  M
+                                                       v
+   +----------------------------------+   +-------------------------------------+
+   |             READER               |   |              LOANS                  |
+   +----------------------------------+   +-------------------------------------+
+   | PK  ReaderID         INT  IDENT  |---+ PK  LoanID            INT  IDENT    |
+   |     FullName         VARCHAR     |   | FK  BookID            INT  <--------+--> BOOKS(BookID)
+   | UK  PhoneNumber      VARCHAR IX  |   | FK  ReaderID          INT  <--------+--> READER(ReaderID)
+   |     Email            VARCHAR IX  |   |     LoanDate          DATE          |
+   |     RegDate          DATE        |   |     DueDate           DATE          |
+   |     IsActive         BIT         |   |     ReturnDate        DATE NULL     |
+   +----------------------------------+   |     FineAmount        MONEY         |
+                                          +----------+------------+-------------+
+                                      1 |            | 1          | 1
+                                        |            | M          | 1 (архивация)
+                                        v            v            v
+                                  +----------------------+  +---------------------+
+                                  |        FINES         |  |   LOANS_ARCHIVE     |
+                                  +----------------------+  +---------------------+
+                                  | PK  FineID    INT ID |  | PK  LoanID    INT   |
+                                  | FK  LoanID    INT    |  |     BookID    INT   |
+                                  | FK  ReaderID  INT    |  |     ReaderID  INT   |
+                                  |     Amount    MONEY  |  |     LoanDate  DATE  |
+                                  |     CalculatedAt     |  |     DueDate   DATE  |
+                                  |     IsPaid    BIT    |  |     ReturnDate DATE |
+                                  +----------------------+  |     FineAmount MONEY|
+                                                            +---------------------+
+
+
+Таблица 1 — Сущности и их назначение
+
++------------------+-----------------------------------------------+------------------+
+|    Сущность      |                 Назначение                    |  Первичный ключ  |
++------------------+-----------------------------------------------+------------------+
+| BOOKS            | Каталог книг библиотеки                       | BookID (IDENTITY)|
+| READER           | Зарегистрированные читатели                   | ReaderID (IDENT) |
+| LOANS            | Текущие (активные и недавние) выдачи книг     | LoanID (IDENTITY)|
+| FINES            | Штрафы за просрочку возврата                  | FineID (IDENTITY)|
+| LOANS_ARCHIVE    | Архив выдач старше 1 года                     | LoanID (без IDEN)|
++------------------+-----------------------------------------------+------------------+
+
+
+Таблица 2 — Связи между сущностями
+
++----------------------+--------+---------------------------------------------+
+|        Связь         |  Тип   |         Правило целостности                 |
++----------------------+--------+---------------------------------------------+
+| BOOKS → LOANS        | 1 : M  | Одна книга может быть выдана много раз.     |
+|                      |        | FK Loans.BookID → Books.BookID              |
+| READER → LOANS       | 1 : M  | Один читатель берёт книги многократно.      |
+|                      |        | FK Loans.ReaderID → Reader.ReaderID         |
+| LOANS → FINES        | 1 : M  | По одной выдаче может быть начислен штраф.  |
+|                      |        | FK Fines.LoanID → Loans.LoanID              |
+| READER → FINES       | 1 : M  | Штраф привязан к читателю для выборки.      |
+|                      |        | FK Fines.ReaderID → Reader.ReaderID         |
+| LOANS → LOANS_ARCHIVE| 1 : 1  | При архивации запись переносится без        |
+|                      |        | изменения LoanID. FK не создаётся.          |
++----------------------+--------+---------------------------------------------+
+
+
+Таблица 3 — Файловые группы (физическое размещение)
+
++------------------------------------+-----------------------------------+
+|             Сущность               |        Файловая группа            |
++------------------------------------+-----------------------------------+
+| BOOKS, LOANS, FINES                | FG_Bublioteka (2 файла)           |
+| READER                             | FG_People                         |
+| LOANS_ARCHIVE                      | FG_Archive                        |
+| Все некластеризованные индексы     | FG_Indexes                        |
++------------------------------------+-----------------------------------+
+
+
+3.3. Нормализация до 3НФ
+--------------------------------------------------------------------------------
+
+1НФ — все атрибуты атомарны (ФИО, телефон, ISBN — цельные строки, без списков).
+
+2НФ — используется суррогатный первичный ключ IDENTITY, поэтому частичных
+зависимостей нет.
+
+3НФ — отсутствуют транзитивные зависимости: в таблице Loans не хранятся
+ReaderName или BookTitle, они получаются через JOIN по FK.
+
+Замечание. Строгая 3НФ для книг потребовала бы вынести Authors, Genres в
+отдельные таблицы, но по условию варианта структура ограничена 5 таблицами,
+поэтому эти атрибуты хранятся в Books как атомарные поля. Это стандартное
+учебное упрощение, не нарушающее 1НФ (значение — одна строка, не список).
+
+
+3.4. Скрипт создания базы данных
+--------------------------------------------------------------------------------
+
+CREATE DATABASE Bublioteka
+ON PRIMARY (
+    NAME     = 'Bublioteka_Primary',
+    FILENAME = 'C:\SQLData\Bublioteka\Bublioteka.mdf',
+    SIZE     = 20MB,
+    MAXSIZE  = 150MB,
+    FILEGROWTH = 10MB
+),
+FILEGROUP FG_Bublioteka (
+    NAME     = 'Bublioteka_Data1',
+    FILENAME = 'C:\SQLData\Bublioteka\Bublioteka_Data1.ndf',
+    SIZE     = 10MB, MAXSIZE = 80MB, FILEGROWTH = 5MB
+),
+(
+    NAME     = 'Bublioteka_Data2',
+    FILENAME = 'C:\SQLData\Bublioteka\Bublioteka_Data2.ndf',
+    SIZE     = 10MB, MAXSIZE = 80MB, FILEGROWTH = 5MB
+),
+FILEGROUP FG_Indexes (
+    NAME     = 'Bublioteka_Idx1',
+    FILENAME = 'C:\SQLData\Bublioteka_Idx\Bublioteka_Idx1.ndf',
+    SIZE     = 5MB, MAXSIZE = 50MB, FILEGROWTH = 5MB
+),
+FILEGROUP FG_People (
+    NAME     = 'Bublioteka_People',
+    FILENAME = 'C:\SQLData\Bublioteka_People\People.ndf',
+    SIZE     = 5MB, MAXSIZE = 40MB, FILEGROWTH = 5MB
+),
+FILEGROUP FG_Archive (
+    NAME     = 'Bublioteka_Archive',
+    FILENAME = 'C:\SQLData\Bublioteka_Archive\Archive.ndf',
+    SIZE     = 5MB, MAXSIZE = 60MB, FILEGROWTH = 5MB
+)
+LOG ON (
+    NAME     = 'Bublioteka_Log',
+    FILENAME = 'C:\SQLData\Bublioteka_Log\Bublioteka_Log.ldf',
+    SIZE     = 10MB, MAXSIZE = 100MB, FILEGROWTH = 10MB
+);
+GO
+
+
+Таблица 4 — Распределение файлов и обоснование размеров
+
++----------------+------------------+---------+---------+--------+-----------------------------+
+| Файловая группа| Файл             | Нач.разм| Макс.   | Шаг    | Обоснование                 |
++----------------+------------------+---------+---------+--------+-----------------------------+
+| PRIMARY        | Bublioteka.mdf   | 20 МБ   | 150 МБ  | 10 МБ  | Системные таблицы + метадан.|
+| FG_Bublioteka  | Data1.ndf        | 10 МБ   | 80 МБ   | 5 МБ   | «Горячие» таблицы, паралл.  |
+| FG_Bublioteka  | Data2.ndf        | 10 МБ   | 80 МБ   | 5 МБ   | То же                       |
+| FG_Indexes     | Idx1.ndf         | 5 МБ    | 50 МБ   | 5 МБ   | Отделение индексов          |
+| FG_People      | People.ndf       | 5 МБ    | 40 МБ   | 5 МБ   | Изоляция таблицы Reader     |
+| FG_Archive     | Archive.ndf      | 5 МБ    | 60 МБ   | 5 МБ   | Редко читаемые архивные дан.|
+| LOG            | Bublioteka_Log.ldf| 10 МБ  | 100 МБ  | 10 МБ  | Пиковые транзакции          |
++----------------+------------------+---------+---------+--------+-----------------------------+
+
+Итого максимум: 150 + 80 + 80 + 50 + 40 + 60 + 100 = 560 МБ (жёсткий потолок).
+Фактическое заполнение в работе < 380 МБ.
+
+
+3.5. Скрипты создания таблиц, ограничений и индексов
+--------------------------------------------------------------------------------
+
+USE Bublioteka;
+GO
+
+-- 1. BOOKS — каталог книг
+CREATE TABLE Books (
+    BookID           INT PRIMARY KEY IDENTITY(1,1),
+    Title            VARCHAR(150) NOT NULL,
+    Author           VARCHAR(150) NOT NULL,
+    Genre            VARCHAR(80)  NOT NULL,
+    PublicationYear  SMALLINT     NOT NULL
+        CHECK (PublicationYear BETWEEN 1000 AND YEAR(GETDATE())),
+    ISBN             VARCHAR(20)  NOT NULL UNIQUE
+        CHECK (ISBN LIKE '978-%' OR ISBN LIKE '979-%'),
+    TotalCopies      INT          NOT NULL DEFAULT 0 CHECK (TotalCopies >= 0),
+    AvailableCopies  INT          NOT NULL DEFAULT 0
+        CHECK (AvailableCopies >= 0 AND AvailableCopies <= TotalCopies)
+) ON FG_Bublioteka;
+GO
+
+CREATE NONCLUSTERED INDEX IX_Books_Author          ON Books(Author)          ON FG_Indexes;
+CREATE NONCLUSTERED INDEX IX_Books_Genre           ON Books(Genre)           ON FG_Indexes;
+CREATE NONCLUSTERED INDEX IX_Books_PublicationYear ON Books(PublicationYear) ON FG_Indexes;
+GO
+
+-- 2. READER — читатели
+CREATE TABLE Reader (
+    ReaderID    INT PRIMARY KEY IDENTITY(1,1),
+    FullName    VARCHAR(150) NOT NULL,
+    PhoneNumber VARCHAR(20)  NOT NULL UNIQUE
+        CHECK (PhoneNumber LIKE '+7%' AND PhoneNumber NOT LIKE '%[^0-9+]%'),
+    Email       VARCHAR(120) NULL
+        CHECK (Email IS NULL OR Email LIKE '%@%.%'),
+    RegDate     DATE         NOT NULL DEFAULT GETDATE(),
+    IsActive    BIT          NOT NULL DEFAULT 1
+) ON FG_People;
+GO
+
+CREATE NONCLUSTERED INDEX IX_Reader_PhoneNumber ON Reader(PhoneNumber) ON FG_People;
+CREATE NONCLUSTERED INDEX IX_Reader_Email       ON Reader(Email)       ON FG_People;
+GO
+
+-- 3. LOANS — выдачи книг
+CREATE TABLE Loans (
+    LoanID     INT PRIMARY KEY IDENTITY(1,1),
+    BookID     INT  NOT NULL,
+    ReaderID   INT  NOT NULL,
+    LoanDate   DATE NOT NULL DEFAULT GETDATE(),
+    DueDate    DATE NOT NULL,
+    ReturnDate DATE NULL,
+    FineAmount MONEY NOT NULL DEFAULT 0 CHECK (FineAmount >= 0),
+    CONSTRAINT FK_Loans_Books  FOREIGN KEY (BookID)   REFERENCES Books(BookID),
+    CONSTRAINT FK_Loans_Reader FOREIGN KEY (ReaderID) REFERENCES Reader(ReaderID),
+    CONSTRAINT CK_Loans_Dates  CHECK (DueDate >= LoanDate
+                                  AND (ReturnDate IS NULL OR ReturnDate >= LoanDate))
+) ON FG_Bublioteka;
+GO
+
+CREATE NONCLUSTERED INDEX IX_Loans_BookID   ON Loans(BookID)   ON FG_Indexes;
+CREATE NONCLUSTERED INDEX IX_Loans_ReaderID ON Loans(ReaderID) ON FG_Indexes;
+
+CREATE NONCLUSTERED INDEX IX_Loans_Active
+    ON Loans(DueDate, ReaderID)
+    WHERE ReturnDate IS NULL
+    ON FG_Indexes;
+GO
+
+-- 4. FINES — штрафы
+CREATE TABLE FINES (
+    FineID       INT PRIMARY KEY IDENTITY(1,1),
+    LoanID       INT   NOT NULL,
+    ReaderID     INT   NOT NULL,
+    Amount       MONEY NOT NULL CHECK (Amount > 0),
+    CalculatedAt DATETIME NOT NULL DEFAULT GETDATE(),
+    IsPaid       BIT   NOT NULL DEFAULT 0,
+    CONSTRAINT FK_Fines_Loan   FOREIGN KEY (LoanID)   REFERENCES Loans(LoanID),
+    CONSTRAINT FK_Fines_Reader FOREIGN KEY (ReaderID) REFERENCES Reader(ReaderID)
+) ON FG_Bublioteka;
+GO
+
+CREATE NONCLUSTERED INDEX IX_Fines_LoanID          ON FINES(LoanID)           ON FG_Indexes;
+CREATE NONCLUSTERED INDEX IX_Fines_ReaderID_IsPaid ON FINES(ReaderID, IsPaid) ON FG_Indexes;
+GO
+
+-- 5. LoansArchive — архив (FG_Archive)
+CREATE TABLE LoansArchive (
+    LoanID     INT PRIMARY KEY,
+    BookID     INT NOT NULL,
+    ReaderID   INT NOT NULL,
+    LoanDate   DATE NOT NULL,
+    DueDate    DATE NOT NULL,
+    ReturnDate DATE NULL,
+    FineAmount MONEY NOT NULL DEFAULT 0
+) ON FG_Archive;
+GO
+
+CREATE NONCLUSTERED INDEX IX_Archive_ReaderID ON LoansArchive(ReaderID) ON FG_Archive;
+CREATE NONCLUSTERED INDEX IX_Archive_LoanDate ON LoansArchive(LoanDate) ON FG_Archive;
+GO
+
+
+3.6. Заполнение данными
+--------------------------------------------------------------------------------
+
+Заполнено 105 строк: 25 книг, 20 читателей, 35 выдач, 10 штрафов, 15 архивных
+записей.
+
+-- Пример вставки книг (25 строк)
+INSERT INTO Books (Title, Author, Genre, PublicationYear, ISBN, TotalCopies, AvailableCopies) VALUES
+('Мастер и Маргарита',       'М.А. Булгаков',    'Роман',        1967, '978-5-04-118428-7', 5, 5),
+('Преступление и наказание', 'Ф.М. Достоевский', 'Роман',        1866, '978-5-04-116398-5', 4, 3),
+-- ... (полный список в Приложении А)
+;
+
+-- Пример вставки читателей (20 строк)
+INSERT INTO Reader (FullName, PhoneNumber, Email, RegDate, IsActive) VALUES
+('Иванов Иван Иванович', '+79161112233', 'ivanov@mail.ru', '2023-01-10', 1),
+-- ...
+;
+
+-- Пример вставки выдач (35 строк)
+INSERT INTO Loans (BookID, ReaderID, LoanDate, DueDate, ReturnDate, FineAmount) VALUES
+(1, 1, '2024-09-01', '2024-09-15', '2024-09-12', 0),
+-- ...
+;
+
+-- Проверка
+SELECT 'Books' AS Tbl, COUNT(*) AS Rows FROM Books
+UNION ALL SELECT 'Reader',       COUNT(*) FROM Reader
+UNION ALL SELECT 'Loans',        COUNT(*) FROM Loans
+UNION ALL SELECT 'FINES',        COUNT(*) FROM FINES
+UNION ALL SELECT 'LoansArchive', COUNT(*) FROM LoansArchive;
+-- Итого: 25 + 20 + 35 + 10 + 15 = 105 строк
+
+
+3.7. Представления и хранимые процедуры
+--------------------------------------------------------------------------------
+
+CREATE VIEW vAvailableBooks AS
+SELECT BookID, Title, Author, Genre, PublicationYear, AvailableCopies
+FROM Books
+WHERE AvailableCopies > 0;
+GO
+
+CREATE VIEW vActiveLoans AS
+SELECT l.LoanID, b.Title, r.FullName, l.LoanDate, l.DueDate
+FROM Loans l
+JOIN Books  b ON b.BookID   = l.BookID
+JOIN Reader r ON r.ReaderID = l.ReaderID
+WHERE l.ReturnDate IS NULL;
+GO
+
+CREATE VIEW vMyLoans AS
+SELECT l.LoanID, b.Title, l.LoanDate, l.DueDate, l.ReturnDate, l.FineAmount
+FROM Loans l
+JOIN Books  b ON b.BookID   = l.BookID
+JOIN Reader r ON r.ReaderID = l.ReaderID
+WHERE r.Email = SUSER_SNAME() + '@library.local';
+GO
+
+CREATE PROCEDURE usp_IssueBook
+    @BookID INT, @ReaderID INT, @Days INT = 14
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF (SELECT AvailableCopies FROM Books WHERE BookID = @BookID) <= 0
+        RAISERROR('Нет доступных экземпляров книги', 16, 1);
+    ELSE
+    BEGIN
+        INSERT INTO Loans (BookID, ReaderID, LoanDate, DueDate)
+        VALUES (@BookID, @ReaderID, CAST(GETDATE() AS DATE),
+                DATEADD(DAY, @Days, CAST(GETDATE() AS DATE)));
+        UPDATE Books SET AvailableCopies = AvailableCopies - 1 WHERE BookID = @BookID;
+    END
+END;
+GO
+
+CREATE PROCEDURE usp_ReturnBook @LoanID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @BookID INT, @DueDate DATE, @ReaderID INT, @Fine MONEY;
+    SELECT @BookID = BookID, @DueDate = DueDate, @ReaderID = ReaderID
+    FROM Loans WHERE LoanID = @LoanID AND ReturnDate IS NULL;
+
+    IF @BookID IS NULL
+    BEGIN
+        RAISERROR('Активная выдача не найдена', 16, 1);
+        RETURN;
+    END;
+
+    SET @Fine = CASE WHEN DATEDIFF(DAY, @DueDate, GETDATE()) > 0
+                     THEN DATEDIFF(DAY, @DueDate, GETDATE()) * 10.0 ELSE 0 END;
+
+    UPDATE Loans SET ReturnDate = CAST(GETDATE() AS DATE), FineAmount = @Fine
+    WHERE LoanID = @LoanID;
+
+    UPDATE Books SET AvailableCopies = AvailableCopies + 1 WHERE BookID = @BookID;
+
+    IF @Fine > 0
+        INSERT INTO FINES (LoanID, ReaderID, Amount) VALUES (@LoanID, @ReaderID, @Fine);
+END;
+GO
+
+
+3.8. Пользователи, роли и привилегии
+--------------------------------------------------------------------------------
+
+Логины (уровень сервера):
+
+CREATE LOGIN admin_lib   WITH PASSWORD = 'Adm1n#2025!';
+CREATE LOGIN librarian   WITH PASSWORD = 'L1br@ry2025';
+CREATE LOGIN reader_user WITH PASSWORD = 'R3ad3r#2025';
+CREATE LOGIN inventory   WITH PASSWORD = 'Inv3nt0ry!';
+
+Роли и права (уровень БД):
+
+CREATE USER admin_lib   FOR LOGIN admin_lib;
+CREATE USER librarian   FOR LOGIN librarian;
+CREATE USER reader_user FOR LOGIN reader_user;
+CREATE USER inventory   FOR LOGIN inventory;
+
+CREATE ROLE Admin;
+CREATE ROLE Librarian;
+CREATE ROLE ReaderRole;
+CREATE ROLE InventoryManager;
+
+-- Admin — db_owner (полный доступ)
+ALTER ROLE db_owner ADD MEMBER Admin;
+
+-- Librarian — выдачи, читатели, чтение книг
+GRANT SELECT, INSERT, UPDATE ON Loans  TO Librarian;
+GRANT SELECT, INSERT, UPDATE ON Reader TO Librarian;
+GRANT SELECT                 ON Books  TO Librarian;
+GRANT EXECUTE ON usp_IssueBook  TO Librarian;
+GRANT EXECUTE ON usp_ReturnBook TO Librarian;
+DENY  DELETE ON Books  TO Librarian;
+DENY  SELECT, INSERT, UPDATE, DELETE ON FINES        TO Librarian;
+DENY  SELECT, INSERT, UPDATE, DELETE ON LoansArchive TO Librarian;
+
+-- ReaderRole — только каталог и свои выдачи
+GRANT SELECT ON Books    TO ReaderRole;
+GRANT SELECT ON vMyLoans TO ReaderRole;
+DENY  SELECT, INSERT, UPDATE, DELETE ON Loans        TO ReaderRole;
+DENY  SELECT, INSERT, UPDATE, DELETE ON Reader       TO ReaderRole;
+DENY  SELECT, INSERT, UPDATE, DELETE ON FINES        TO ReaderRole;
+DENY  SELECT, INSERT, UPDATE, DELETE ON LoansArchive TO ReaderRole;
+
+-- InventoryManager — только каталог книг
+GRANT SELECT, INSERT, UPDATE, DELETE ON Books TO InventoryManager;
+DENY  SELECT, INSERT, UPDATE, DELETE ON Loans        TO InventoryManager;
+DENY  SELECT, INSERT, UPDATE, DELETE ON Reader       TO InventoryManager;
+DENY  SELECT, INSERT, UPDATE, DELETE ON FINES        TO InventoryManager;
+DENY  SELECT, INSERT, UPDATE, DELETE ON LoansArchive TO InventoryManager;
+
+
+Таблица 5 — Матрица прав доступа
+
++------------------+----------+---------+---------+--------+---------+-----------------------+
+|      Роль        |  Books   | Reader  |  Loans  | FINES  | Archive |    SP / VIEW          |
++------------------+----------+---------+---------+--------+---------+-----------------------+
+| Admin            | ALL      | ALL     | ALL     | ALL    | ALL     | ALL                   |
+| Librarian        | SELECT   | SELECT, | SELECT, |   --   |   --    | EXEC usp_IssueBook,   |
+|                  |          | INSERT, | INSERT, |        |         | usp_ReturnBook        |
+|                  |          | UPDATE  | UPDATE  |        |         |                       |
+| ReaderRole       | SELECT   |   --    | -- (vMy |  --    |   --    | SELECT vMyLoans       |
+|                  |          |         | Loans)  |        |         |                       |
+| InventoryManager | SELECT,  |   --    |   --    |  --    |   --    |        --             |
+|                  | INSERT,  |         |         |        |         |                       |
+|                  | UPDATE,  |         |         |        |         |                       |
+|                  | DELETE   |         |         |        |         |                       |
++------------------+----------+---------+---------+--------+---------+-----------------------+
+
+
+3.9. Перемещение файлов базы данных
+--------------------------------------------------------------------------------
+
+Шаг 1. Определение логических имён файлов:
+
+USE Bublioteka;
+SELECT name, physical_name, type_desc FROM sys.database_files;
+
+Шаг 2. Перевод БД в автономный режим (освобождает файлы от захвата):
+
+USE master;
+ALTER DATABASE Bublioteka SET OFFLINE WITH ROLLBACK IMMEDIATE;
+
+Шаг 3. Изменение путей в метаданных (логические имена из шага 1):
+
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Primary',  FILENAME = 'D:\NewLocation\Bublioteka.mdf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Data1',    FILENAME = 'D:\NewLocation\Bublioteka_Data1.ndf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Data2',    FILENAME = 'D:\NewLocation\Bublioteka_Data2.ndf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Idx1',     FILENAME = 'D:\NewLocation\Bublioteka_Idx1.ndf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_People',   FILENAME = 'D:\NewLocation\People.ndf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Archive',  FILENAME = 'D:\NewLocation\Archive.ndf');
+ALTER DATABASE Bublioteka
+MODIFY FILE (NAME = 'Bublioteka_Log',      FILENAME = 'D:\NewLocation\Bublioteka_Log.ldf');
+
+Шаг 4. Физический перенос файлов средствами ОС:
+
+move "C:\SQLData\Bublioteka\*.mdf"     "D:\NewLocation\"
+move "C:\SQLData\Bublioteka\*.ndf"     "D:\NewLocation\"
+move "C:\SQLData\Bublioteka_Log\*.ldf" "D:\NewLocation\"
+
+Шаг 5. Возврат БД в рабочий режим и проверка:
+
+ALTER DATABASE Bublioteka SET ONLINE;
+GO
+SELECT name, physical_name FROM sys.database_files;
+
+
+3.10. Отсоединение и присоединение БД
+--------------------------------------------------------------------------------
+
+-- Отсоединение
+USE master;
+ALTER DATABASE Bublioteka SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+EXEC sp_detach_db @dbname = N'Bublioteka', @skipchecks = N'true';
+
+-- Присоединение к другому экземпляру SQL Server
+CREATE DATABASE Bublioteka ON
+    (FILENAME = 'D:\SQLData\Bublioteka.mdf'),
+    (FILENAME = 'D:\SQLData\Bublioteka_Data1.ndf'),
+    (FILENAME = 'D:\SQLData\Bublioteka_Data2.ndf'),
+    (FILENAME = 'D:\SQLData\Bublioteka_Idx1.ndf'),
+    (FILENAME = 'D:\SQLData\People.ndf'),
+    (FILENAME = 'D:\SQLData\Archive.ndf'),
+    (FILENAME = 'D:\SQLData\Bublioteka_Log.ldf')
+FOR ATTACH;
+
+ALTER DATABASE Bublioteka SET MULTI_USER;
+
+Важно: версия целевого SQL Server должна быть не ниже версии исходного.
+
+
+3.11. Удаление файлов БД через xp_cmdshell
+--------------------------------------------------------------------------------
+
+EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
+EXEC sp_configure 'xp_cmdshell', 1;           RECONFIGURE;
+
+ALTER DATABASE Bublioteka SET OFFLINE WITH ROLLBACK IMMEDIATE;
+
+EXEC xp_cmdshell 'del "D:\NewLocation\Bublioteka_Data1.ndf"';
+EXEC xp_cmdshell 'del "D:\NewLocation\Archive.ndf"';
+
+-- Отключение компонента (безопасность)
+EXEC sp_configure 'xp_cmdshell', 0;           RECONFIGURE;
+EXEC sp_configure 'show advanced options', 0; RECONFIGURE;
+
+
+
+
+
+4. ВЫВОДЫ ПО РАБОТЕ
+
+В ходе лабораторной работы была спроектирована и реализована реляционная база
+данных «Библиотека» в СУБД Microsoft SQL Server.
+
+Выполнено:
+
+1. Проведён анализ предметной области, выделены 5 сущностей: Books, Reader,
+   Loans, FINES, LoansArchive.
+2. Построена ER-диаграмма в нотации Crow's Foot, отражающая связи
+   «один-ко-многим» и «один-к-одному», с привязкой связей к конкретным
+   атрибутам-ключам (PK ↔ FK).
+3. Проведена нормализация до 3НФ: устранены избыточность и транзитивные
+   зависимости.
+4. Создана БД Bublioteka с 5 файловыми группами (PRIMARY, FG_Bublioteka,
+   FG_Indexes, FG_People, FG_Archive) и файлом журнала. Для каждого файла
+   обоснованы начальный размер, ограничение роста и шаг увеличения.
+5. Созданы все таблицы с ограничениями PRIMARY KEY, FOREIGN KEY, CHECK,
+   UNIQUE, DEFAULT, а также кластеризованные и некластеризованные индексы,
+   размещённые отдельно от таблиц.
+6. БД заполнена 105 строками осмысленных данных, имитирующих реальную
+   библиотечную деятельность.
+7. Созданы представления (vAvailableBooks, vActiveLoans, vMyLoans) и хранимые
+   процедуры (usp_IssueBook, usp_ReturnBook) для безопасного доступа к данным
+   по принципу минимальных привилегий.
+8. Настроены 4 роли — Admin, Librarian, ReaderRole, InventoryManager — с
+   разграничением прав по матрице доступа. Использованы GRANT, DENY,
+   ALTER ROLE ... ADD MEMBER.
+9. Отработаны административные операции:
+   - перемещение файлов БД в новое физическое хранилище
+     (ALTER DATABASE ... MODIFY FILE + физический move);
+   - отсоединение и присоединение БД (sp_detach_db, CREATE DATABASE ...
+     FOR ATTACH);
+   - удаление файлов средствами СУБД (xp_cmdshell) с последующим отключением
+     компонента из соображений безопасности.
+
+Полученные навыки: проектирование нормализованной БД, планирование
+физического хранения в SQL Server, реализация ролевой модели безопасности,
+выполнение административных операций с файлами и БД.
+
+Замечания по варианту: структура ограничена 5 таблицами, поэтому атрибуты
+«Автор» и «Жанр» хранятся в Books как атомарные поля; при снятии ограничения
+их следовало бы вынести в отдельные справочники для более строгого соблюдения
+3НФ.
+
+
+
+
+                              КОНЕЦ ОТЧЁТА
