@@ -1,0 +1,9 @@
+C:\Users\Student\Desktop\smola\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.AssemblyReference.cache
+C:\Users\Student\Desktop\smola\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.ServerForm.resources
+C:\Users\Student\Desktop\smola\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.GenerateResource.cache
+C:\Users\Student\Desktop\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.AssemblyReference.cache
+C:\Users\Student\Desktop\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.ServerForm.resources
+C:\Users\Student\Desktop\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.GenerateResource.cache
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.AssemblyReference.cache
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.ServerForm.resources
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\MessangerAloha\x64\Debug\MessangerAloha.vcxproj.GenerateResource.cache

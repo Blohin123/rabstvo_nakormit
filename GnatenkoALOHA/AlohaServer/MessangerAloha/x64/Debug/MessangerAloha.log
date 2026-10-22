@@ -1,0 +1,16 @@
+﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(538,5): warning MSB8028: промежуточный каталог (x64\Debug\) содержит файлы, которые используются совместно с другим проектом (MessangerAloha.vcxproj).  Это может привести к ошибкам очистки и перестроения.
+  Client.cpp
+C:\Users\Student\Desktop\GnatenkoALOHA\SocketWrapper\src\Client.cpp(1,10): error C1083: Не удается открыть файл включение: SocketWrapper/Client.h: No such file or directory,
+  Server.cpp
+C:\Users\Student\Desktop\GnatenkoALOHA\SocketWrapper\src\Server.cpp(1,10): error C1083: Не удается открыть файл включение: SocketWrapper/Server.h: No such file or directory,
+  SocketWrapper.cpp
+C:\Users\Student\Desktop\GnatenkoALOHA\SocketWrapper\src\SocketWrapper.cpp(1,10): error C1083: Не удается открыть файл включение: SocketWrapper/SocketWrapper.h: No such file or directory,
+  ServerForm.cpp
+C:\Users\Student\Desktop\GnatenkoALOHA\AlohaServer\MessangerAloha\ServerForm.h(2,10): error C1083: Не удается открыть файл включение: SocketWrapper/Server.h: No such file or directory,
+  (компиляция исходного файла "ServerForm.cpp")
+  
+  WinServer.cpp
+C:\Users\Student\Desktop\GnatenkoALOHA\AlohaServer\MessangerAloha\ServerForm.h(2,10): error C1083: Не удается открыть файл включение: SocketWrapper/Server.h: No such file or directory,
+  (компиляция исходного файла "WinServer.cpp")
+  
+  Создание кода...

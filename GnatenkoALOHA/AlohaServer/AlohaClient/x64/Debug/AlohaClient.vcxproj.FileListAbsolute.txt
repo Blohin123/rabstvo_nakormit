@@ -1,0 +1,6 @@
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.vcxproj.AssemblyReference.cache
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.ClientForm.resources
+C:\Users\Student.FYR-203-10\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.vcxproj.GenerateResource.cache
+C:\Users\Student\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.vcxproj.AssemblyReference.cache
+C:\Users\Student\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.ClientForm.resources
+C:\Users\Student\Desktop\GnatenkoALOHA\AlohaServer\AlohaClient\x64\Debug\AlohaClient.vcxproj.GenerateResource.cache
